@@ -1,0 +1,315 @@
+<html>
+<head>
+<title></title>
+<style>
+	*{margin:0;padding:0; cursor:none}
+	body{background:#000;font-family: 'Aldrich', sans-serif;}
+	#hud{position:absolute;z-index:1;left:0;right:0;top:0;bottom:0}
+	/*#hud #sheld{background:url('hud/hud_top_sheld.png') no-repeat left top;width:256px;height:256px; position:absolute; top:0;left:0}*/
+	#hud #sheld .num{color:#00FFA0;  font-size:30px;  left:20px;  position:absolute;  top:20px;}
+	/*#hud #mode{background:url('hud/hud_top_mode.png') no-repeat right top;width:256px;height:256px; position:absolute; top:0;right:0}*/
+</style>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+<link href='http://fonts.googleapis.com/css?family=Aldrich' rel='stylesheet' type='text/css'>
+</head>
+<body>
+<script src="js/Detector.js"></script>
+<script src="js/Three.js"></script>
+<script src="js/physi.js"></script>
+<script src="js/res.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/galaxy.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/gates.js"></script>
+<script src="js/helper.js"></script>
+<script src="js/bonus.js"></script>
+<script src="js/FirstPersonControls.js"></script>
+<script src="js/AnaglyphEffect.js"></script>
+<script src="js/world.js"></script>
+<script src="js/host.js"></script>
+<script src="js/bug.js"></script>
+<script src="js/rocks.js"></script>
+<script src="js/enemy.js"></script>
+<script src="js/misc.js"></script>
+<script src="js/cross.js"></script>
+<script src="js/bullet.js"></script>
+<script src="js/LensLights.js"></script>
+<script src="js/tween.min.js"></script>
+<script src="js/HUD.js"></script>
+<script>
+	'use strict';
+
+	Physijs.scripts.worker = 'js/physijs_worker.js';
+	Physijs.scripts.ammo = 'ammo.js';
+
+	var shading = THREE.SmoothShading;
+
+	var friction = 0.5; // high friction
+	var restitution = 0.2; // low restitution
+
+	var scene, camera, camera2, camera3, renderer, clock, anaglyp1, anaglyp2;
+	var distance;
+	var controls;
+	var host, cross, level, hud;
+
+	var currentCamera;
+
+	var shootInterval = 200, bulletsInterval='null', shootType='single';
+
+	/*var audio = document.createElement( 'audio' );
+	var source = document.createElement( 'source' );
+	source.src = 'sfx/bwatts_-_Seven(New_Music_Remix).mp3';
+	audio.appendChild(source);
+	audio.play();*/
+
+	function init(){
+
+		//init
+		scene = new Physijs.Scene();
+		scene.setGravity(new THREE.Vector3( 0, 0, 0 ));
+		camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 10000);
+		camera.position.set(0,0,0);
+		camera.rotation.set(0,0,0);
+
+		camera2 = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 10000);
+		camera2.position.set(0,0,0);
+		camera2.rotation.set(0,0,0);
+
+		camera3 = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 10000);
+		camera3.position.set(0,0,0);
+		camera3.rotation.set(0,0,0);
+
+		currentCamera = camera;
+
+		//init Level
+		level = new Level(currentLevel);
+
+		//Hud
+		hud = new Hud();
+
+		//scene clock
+		clock = new THREE.Clock();
+
+		//scene controls
+		controls = new THREE.FirstPersonControls(camera);
+		controls.movementSpeed = 15;
+		controls.lookSpeed = 0.20;
+		controls.autoForward = true;
+
+		//renderer
+
+		renderer = new THREE.WebGLRenderer({ antialias: true, clearColor:0x000000 });
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		renderer.sortObjects = false;
+		renderer.autoClear = false;
+		renderer.shadowMapEnabled = true;
+		renderer.shadowMapSoft = true;
+		//canvas
+		document.getElementById("container").appendChild(renderer.domElement);
+		renderer.domElement.setAttribute("id","canvas");
+
+		//effects
+		anaglyp1 = new THREE.AnaglyphEffect( renderer );
+		anaglyp2 = new THREE.AnaglyphEffect( renderer );
+		anaglyp1.setSize(window.innerWidth || 2, window.innerHeight || 2 );
+		anaglyp2.setSize(window.innerWidth || 2, window.innerHeight || 2 );
+	}
+	function animate() {
+		requestAnimationFrame( animate );
+		render();
+	}
+	function render(){
+
+		renderer.clear();
+
+		var cam2Pos = new THREE.Vector3();
+		var cam2Target = new THREE.Vector3();
+
+		cam2Pos.getPositionFromMatrix(host.__cameraBehind.matrixWorld);
+		cam2Target.getPositionFromMatrix(host.__endPoint.matrixWorld);
+
+		camera2.position.copy(cam2Pos);
+		camera2.lookAt(cam2Target);
+
+		var cam3Pos = new THREE.Vector3();
+		var cam3Target = new THREE.Vector3();
+
+		cam3Pos.getPositionFromMatrix(host.__cameraTop.matrixWorld);
+		cam3Target.getPositionFromMatrix(host.__endPoint.matrixWorld);
+
+		camera3.position.copy(cam3Pos);
+		camera3.lookAt(cam3Target);
+
+		cameraCube.rotation.copy( currentCamera.rotation );
+
+		//delta
+		var delta = clock.getDelta();
+
+		//controls update
+		controls.moveBackward = false;
+		controls.update(delta);
+
+		//update level
+		level.update(delta);
+
+		//hud update
+		//hud.update();
+
+		//bullets updates
+		for( var i=0; i<bullets.length; i++ ){
+			bullets[i].object.update();
+		}
+
+		//simulate
+		scene.simulate();
+
+		//renderer
+		renderer.render( sceneCube, cameraCube );
+		renderer.render( scene, currentCamera );
+
+		//Anaglyph effect
+		/*anaglyp2.render( scene, currentCamera );
+		anaglyp1.render( sceneCube, cameraCube );
+		*/
+
+	}
+
+	window.addEventListener( 'mousemove', onDocumentMouseMove, false );
+	window.addEventListener( 'mousedown', onDocumentMouseDown, false );
+	window.addEventListener( 'mouseup', onDocumentMouseUp, false );
+
+	window.addEventListener( 'resize', onWindowResize, false );
+	window.addEventListener( 'keydown', onDocumentKeyDown, false );
+	window.addEventListener( 'keyup', onDocumentKeyUp, false );
+
+	function onWindowResize(event){
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		cameraCube.aspect = window.innerWidth / window.innerHeight;
+		cameraCube.updateProjectionMatrix();
+	}
+
+	function onDocumentMouseMove(event){
+		event.preventDefault();
+	}
+
+	function onDocumentMouseDown(event){
+		//event.preventDefault();
+
+		switch(shootType){
+			case 'single':
+				new Bullet(1000,'dot');
+				shootSound.play();
+				if(bulletsInterval == 'null'){
+					bulletsInterval = setInterval(function(){
+						new Bullet(1000,'dot');
+						shootSound.play();
+					},shootInterval);
+				}
+			break;
+			case 'double':
+				new doubleBullet(1000,'dot');
+				shootSound.play();
+				if(bulletsInterval == 'null'){
+					bulletsInterval = setInterval(function(){
+						new doubleBullet(1000,'dot');
+						shootSound.play();
+					},shootInterval);
+				}
+			break;
+			case 'triple':
+				new tripleBullet(1000,'dot');
+				shootSound.play();
+				if(bulletsInterval == 'null'){
+					bulletsInterval = setInterval(function(){
+						new tripleBullet(1000,'dot');
+						shootSound.play();
+					},shootInterval);
+				}
+			break;
+			case 'quadro':
+				new quadroBullet(1000,'dot');
+				shootSound.play();
+				if(bulletsInterval == 'null'){
+					bulletsInterval = setInterval(function(){
+						new quadroBullet(1000,'dot');
+						shootSound.play();
+					},shootInterval);
+				}
+			break;
+		}
+	}
+	function onDocumentMouseUp(event){
+		//event.preventDefault();
+		clearInterval(bulletsInterval);
+		bulletsInterval='null';
+	}
+	function onDocumentKeyDown(event){
+		var key = event.which ? event.which : event.keyCode;
+		switch(key) {
+			case 38: /*up*/
+			case 87: /*W*/ controls.movementSpeed = 50; host.turnForward();
+			break;
+			case 40: /*down*/
+			case 83: /*S*/controls.autoForward = false; host.turnBackward();
+			break;
+			case 39: /*right*/
+			case 68: /*D*/ host.turnRight();
+			break;
+			case 37: /*left*/
+			case 65: /*A*/ host.turnLeft();
+			break;
+			case 32: /*space*/focusIn();
+			break;
+			case 16: /*shift*/if(currentCamera == camera){currentCamera = camera2}else if(currentCamera == camera2){currentCamera = camera3}else{currentCamera = camera};
+			break;
+			case 69: /*e*/scene.setGravity(new THREE.Vector3( 0, -500, 0 ));
+			break;
+			case 49: /*1*/new Armagedon();
+			break;
+			case 50: /*2*/new AtomDestroyer();
+			break;
+			case 51: /*3*/new Rocket();
+			break;
+			case 82: /*R*/host.turnOnReflector();
+			break;
+		}
+	}
+	function onDocumentKeyUp(event){
+		var key = event.which ? event.which : event.keyCode;
+		switch(key) {
+			case 38: /*up*/
+			case 87: /*W*/ controls.movementSpeed = 10; host.turnBack();
+			break;
+			case 40: /*down*/
+			case 83: /*S*/ controls.autoForward = true; host.turnBack();
+			break;
+			case 39: /*right*/
+			case 68: /*D*/ host.turnBack();
+			break;
+			case 37: /*left*/
+			case 65: /*A*/ host.turnBack();
+			break;
+			case 32: /*space*/focusOut();
+			break;
+			case 16: /*shift*///currentCamera = camera;
+			break;
+			case 69: /*e*/scene.setGravity(new THREE.Vector3( 0, 0, 0 ));
+			break;
+			case 82: /*R*/host.turnOffReflector();
+			break;
+		}
+	}
+
+	window.onload = function(){
+		if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+		init();
+		animate();
+	};
+</script>
+<div id="hud"><div id="sheld"><div class="num"></div></div><div id="mode"></div></div>
+<div id="container" style="position:relative"></div>
+</body>
+</html>

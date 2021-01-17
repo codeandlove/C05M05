@@ -1,0 +1,659 @@
+<html>
+<head>
+<title>My first Three.js app</title>
+<style>
+	*{margin:0;padding:0; /*cursor:none*/}
+	body{background:#000;}
+	
+</style>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+
+</head>
+<body>
+
+<script src="js/Three.js"></script>
+<script src="js/physi.js"></script>
+<script src="js/FirstPersonControls.js"></script>
+<script src="js/AnaglyphEffect.js"></script>
+<script src="js/LensLights.js"></script>
+<script src="js/tween.min.js"></script>
+
+
+<script>
+	//'use strict';
+	
+	Physijs.scripts.worker = 'js/physijs_worker.js';
+	Physijs.scripts.ammo = 'ammo.js';
+	
+	var scene, camera, renderer, effect;
+	var cross, mouse = new THREE.Vector2();
+	var projector = new THREE.Projector();
+	var clock;
+	var controls;
+	var world, worldRadius = 200;
+	var host;
+	var galaxy;
+	var distance;
+	var bugs = [];
+	var bullets = [], bulletsObjects = [];
+	var bug, worm;
+	var shootInterval = null, shootIntervalNum = 100;
+	var bonusArray = [];
+	var hitArrary = [];
+	var shootSound, hitSound, bugExplode, hostHitted;
+	var shading = THREE.SmoothShading;
+	
+	var textureCube;
+	var cameraCube, sceneCube; 
+	
+	function init(){
+		scene = new Physijs.Scene();
+		scene.setGravity(new THREE.Vector3( 0, 0, 0 ));
+		camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, worldRadius*100);
+		
+		sceneCube = new THREE.Scene();
+		cameraCube = new THREE.PerspectiveCamera( 25, window.innerWidth/window.innerHeight, 1, 10000 );
+		sceneCube.add( cameraCube ); 
+		
+		var r = "textures/gal/00/";
+		var urls = [ r + "px.png", r + "nx.png",
+					r + "py.png", r + "ny.png",
+					r + "pz.png", r + "nz.png" ];
+		textureCube = THREE.ImageUtils.loadTextureCube( urls ); 
+		
+		renderer = new THREE.WebGLRenderer({ antialias: true, clearColor:0x000000 } );
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		
+		document.getElementById("container").appendChild(renderer.domElement);
+
+		clock = new THREE.Clock();
+		
+		var shader = THREE.ShaderLib[ "cube" ];
+		shader.uniforms[ "tCube" ].value = textureCube;
+		var material = new THREE.ShaderMaterial( {
+			fragmentShader: shader.fragmentShader,
+			vertexShader: shader.vertexShader,
+			uniforms: shader.uniforms,
+			depthWrite: false,
+			side: THREE.BackSide
+		}),
+		mesh = new THREE.Mesh( new THREE.CubeGeometry( 100, 100, 100 ), material );
+		sceneCube.add( mesh ); 
+		
+		//world		
+		var geometry = new THREE.IcosahedronGeometry( worldRadius,  3 );
+		var material = new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, transparent:true, opacity:0.05, blending:THREE.AdditiveBlending});
+		world = new THREE.Mesh(geometry,material);
+		scene.add(world); 
+
+		//host
+		var geometry = new THREE.SphereGeometry( 10,  8, 8 );
+		var material = new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, visible:false});
+		host = new THREE.Mesh(geometry,material);
+		scene.add(host);		
+		
+		cross = new Cross();
+		
+		controls = new THREE.FirstPersonControls(camera);
+
+		controls.movementSpeed = 50;
+		controls.lookSpeed = 0.2;
+		
+		//effects
+		effect = new THREE.AnaglyphEffect( renderer );
+		effect.setSize(window.innerWidth || 2, window.innerHeight || 2 ); 
+
+		for(var i=0; i<10; i++){
+			new Bug({parts:1,lives:100});
+		}
+		/*setInterval(function(){
+			new Bug({parts:1,lives:10});
+		},500);*/
+		
+		shootItervalBonus();
+		
+		shootSound = new Sound('sfx/shoot.wav');
+		hitSound = new Sound('sfx/hit.mp3');
+		bugExplode = new Sound('sfx/bugExplode.mp3');
+		hostHitted = new Sound('sfx/hostHitted.mp3');		
+		
+		galaxy = new createGalaxy();
+		
+		renderer.domElement.addEventListener( 'mousemove', onDocumentMouseMove, false );
+		renderer.domElement.addEventListener( 'mousedown', onDocumentMouseDown, false );
+		renderer.domElement.addEventListener( 'mouseup', onDocumentMouseUp, false );
+		
+	}
+
+	function render(){
+		scene.simulate();
+		//scene.setGravity(new THREE.Vector3( host.position.x, host.position.y, host.position.z ).normalize().multiplyScalar(1));
+		
+		requestAnimationFrame(render);
+		renderer.render( scene, camera ); 
+		
+		distance = scene.position.distanceTo(camera.position);
+
+		host.position.copy(camera.position);
+		host.rotation.copy(camera.rotation);
+	
+
+		if(distance>=worldRadius){
+			var oldPos = camera.position.clone();
+			var newPos = new THREE.Vector3(
+				oldPos.x*-1,
+				oldPos.y*-1,
+				oldPos.z*-1
+			)
+			camera.position.set(newPos.x,newPos.y,newPos.z);
+			camera.lookAt(scene.position);
+		}
+
+		var delta = clock.getDelta();
+
+		controls.moveForward = true;
+		controls.update(delta);
+		
+		cross.update();
+		
+		//effect.render( scene, camera )
+		
+		if(bullets.length>0){
+			for(var i=0; i<bullets.length; i++){
+				bullets[i].object.update();
+			}
+		}
+		
+		if(bugs.length>0){
+			for(var i=0; i<bugs.length; i++){
+				bugs[i].object.update();
+			}
+		}
+		
+		/*hitTest(host,bugs,{min:10,max:9},function(i){
+			hitHost(bugs[i].mesh);
+			hostHitted.play();
+		});*/
+		
+		hitTest(host,bonusArray,{min:50,max:49},function(i){
+			scene.remove(bonusArray[i].mesh);
+			bonusArray.splice(i,1);
+			
+			if(shootIntervalNum>10){
+				shootIntervalNum*=1/100;
+			}
+			hostHitted.play();
+		});
+
+		galaxy.update();
+		TWEEN.update();
+	}
+	
+	window.addEventListener( 'resize', onWindowResize, false );
+	window.addEventListener( 'keydown', onDocumentKeyDown, false );
+	window.addEventListener( 'keyup', onDocumentKeyUp, false );
+	
+	function onWindowResize(event){
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+	}
+	function onDocumentMouseMove(event){
+		event.preventDefault();		
+	}
+	function onDocumentMouseDown(event){
+		event.preventDefault();
+		var bullet = new Bullet('single');
+		shootSound.play();
+		if(shootInterval==null){
+			shootInterval = setInterval(function(){
+				var bullet = new Bullet('single');
+				shootSound.play();
+			},shootIntervalNum);
+		}
+	}
+	function onDocumentMouseUp(event){
+		event.preventDefault();
+		clearInterval(shootInterval);
+		shootInterval=null;
+	}
+	function onDocumentKeyDown(event){
+		var key = event.which ? event.which : event.keyCode;
+		switch(key) {					 
+			case 38: /*up*/
+			case 87: /*W*/ controls.movementSpeed = 100;
+			break;
+			case 40: /*down*/
+			case 83: /*S*/ controls.moveForward = false; controls.movementSpeed = 100;
+			break;
+		}
+	}
+	function onDocumentKeyUp(event){
+		var key = event.which ? event.which : event.keyCode;
+		switch(key) {					 
+			case 38: /*up*/
+			case 87: /*W*/ controls.movementSpeed = 50;
+			break;
+			case 40: /*down*/
+			case 83: /*S*/ controls.moveForward = true; controls.movementSpeed = 50;
+			break;
+		}
+	}
+	
+	function hitHost(obj){
+		var startPos = camera.position;
+		var axis = camera.matrixWorld.getPosition().sub(obj.position).clone();
+		var endPos = axis;
+		//.applyMatrix( new THREE.Matrix4().translate( new THREE.Vector3(0,-55,0)))
+		new TWEEN.Tween({
+			x:startPos.x,
+			y:startPos.y,
+			z:startPos.z
+		}).to({
+			x:endPos.x,
+			y:endPos.y,
+			z:endPos.z
+		}, 10).easing( TWEEN.Easing.Sinusoidal.InOut ).onUpdate(function (){
+			camera.position.x = this.x;
+			camera.position.y = this.y;
+			camera.position.z = this.z;
+		}).onStart(function(){
+			controls.freeze = true;
+		}).onComplete(function(){
+			controls.freeze = false;
+		}).start();
+	}
+	
+	function Cross(){
+		
+		var pg = new THREE.PlaneGeometry( 0.2,0.2,1,1 );
+		var pm = new THREE.MeshBasicMaterial({map: new THREE.ImageUtils.loadTexture( "textures/cross_texture.png" ), transparent:true, visible:true, depthTest: true });
+		var planeCross = new THREE.Mesh(pg,pm);	
+		host.add(planeCross);
+		planeCross.position.z=-1;
+		this.object1 = planeCross;
+		
+		var g = new THREE.CubeGeometry( 50,50,50,1,1,1 );
+		
+		var m = new THREE.MeshBasicMaterial({color:0xffffff, visible:false });
+		var cross = new THREE.Mesh(g,m);	
+		host.add(cross);
+
+		cross.position.z=-worldRadius;
+		this.object2 = cross;
+		
+		this.update = function(){
+
+		}
+	}
+	function shootItervalBonus(){
+		var g = new THREE.SphereGeometry( 10,  8, 8 );
+		var m = new THREE.MeshBasicMaterial({color:0xff0000});
+		var bonus = new THREE.Mesh(g,m);
+		scene.add(bonus);
+		var posRange = worldRadius-100;
+		bonus.position.set(-posRange/2+Math.random()*posRange,-posRange/2+Math.random()*posRange,-posRange/2+Math.random()*posRange);
+		bonusArray.push({object:this,mesh:bonus});
+	}
+	function Bullet(type){
+		
+		this.shootType = type || 'single';
+		var bulletsGroup = [];
+		var range = 10;
+		switch (this.shootType) {
+			case 'single':
+				var g = new THREE.SphereGeometry( 1,  8, 8 );
+				var m = new Physijs.createMaterial( new THREE.MeshBasicMaterial({color:0xffffff}), .1,	.1 );
+				var bullet = new Physijs.SphereMesh(g,m);
+				scene.add(bullet);
+				bullet.position.copy(host.position);
+				bullet.rotation.copy(host.rotation);
+				bullets.push({object:this, mesh:bullet});
+			break;
+		}
+		
+		this.animateBullet = function(bullet){
+			var startPos = bullet.position.clone();
+			var bulletDir = cross.object2.matrixWorld.getPosition().clone();
+			new TWEEN.Tween({
+					x:startPos.x,
+					y:startPos.y-host.geometry.radius,
+					z:startPos.z
+			}).to({
+				x:bulletDir.x,
+				y:bulletDir.y,
+				z:bulletDir.z
+			}, 1000).easing( TWEEN.Easing.Sinusoidal.InOut ).onUpdate(function (){
+				bullet.position.x = this.x;
+				bullet.position.y = this.y;
+				bullet.position.z = this.z;
+			}).onStart(function(){}).onComplete(function(){
+				scene.remove(bullet);
+				bullets.splice(1,1);
+			}).start();
+		}
+		
+		if(bulletsGroup.length>0){
+			for(var i=0;i<bulletsGroup.length; i++){
+				//console.log(bulletsGroup[i].position.x);
+				this.animateBullet(bulletsGroup[i]);
+				
+			}
+		}else{
+			this.animateBullet(bullet);
+		}
+		
+		this.update = function(){
+				bullet.__dirtyPosition = true;
+				bullet.__dirtyRotation = true;
+			for(var i=0; i<bugs.length; i++){
+				var distance = bugs[i].mesh.position.distanceTo(bullet.position);
+				if(distance<range){
+					scene.remove(bullet);
+					//console.log('hited', bugs[i]);
+					if(bugs[i].lives>0){
+						bugs[i].lives--;
+						hitBug(bugs[i].object);
+					}else{
+						explodeBug(bugs[i].mesh);
+						scene.remove(bugs[i].mesh);
+						bugs.splice(i,1);
+					}
+					
+				}
+			}
+		};	
+		
+	}
+	function hitBug(bug){
+		var g = new THREE.SphereGeometry( 1, 1, 1 );
+		var m = new THREE.MeshBasicMaterial({color:0xff0000, transparent:true, opacity:0.5, blending:THREE.AdditiveBlending});
+		var hit = new THREE.Mesh(g,m);
+		hitSound.play();
+		bug.object.add(hit);
+		new TWEEN.Tween({
+			x:hit.position.x,
+			y:hit.position.y,
+			z:hit.position.z
+		}).to({
+			x:hit.position.x+(20*Math.random()-10),
+			y:hit.position.y+(20*Math.random()-10),
+			z:hit.position.z+(20*Math.random()-10)
+		}, 500).easing( TWEEN.Easing.Sinusoidal.InOut ).onUpdate(function (){
+			hit.position.x = this.x;
+			hit.position.y = this.y;
+			hit.position.z = this.z;
+		}).onStart(function(){}).onComplete(function(){
+			bug.object.remove(hit);
+		}).start();
+	}
+	function explodeBug(bug){
+		var flare = new lensFlare( 0.08, 0.05, 0.99, bug.position.x, bug.position.y, bug.position.z );
+		var g = new THREE.SphereGeometry( 5, 2, 2 );
+		var m = new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.5, wireframe:true, blending:THREE.AdditiveBlending});
+		var expl = new THREE.Mesh(g,m);
+		expl.position.copy(bug.position);
+		bugExplode.play();
+		scene.add(expl);
+		
+		//createParticles();
+		//createRays(expl);
+		
+		new TWEEN.Tween({
+			x:expl.scale.x,
+			y:expl.scale.y,
+			z:expl.scale.z
+		}).to({
+			x:expl.scale.x+1,
+			y:expl.scale.y+1,
+			z:expl.scale.z+1
+		}, 1000).easing( TWEEN.Easing.Sinusoidal.InOut ).onUpdate(function (){
+			expl.scale.x = this.x;
+			expl.scale.y = this.y;
+			expl.scale.z = this.z;
+			expl.rotation.x+=0.5;
+		}).onStart(function(){}).onComplete(function(){	
+			fadeOut(expl,1000, function(){
+				scene.remove(expl);
+				flare.remove();
+			});
+		}).start();
+	}
+	function createRays(obj){
+		var rayObj = new THREE.Object3D();
+		rayObj.position.copy(obj.position);
+		rayObj.rotation.z = Math.PI/2;
+		
+		scene.add(rayObj);
+		for(var i=0; i<4; i++){
+			var geometry = new THREE.CylinderGeometry(1, 50, 100, 20, 5, true)
+			var material = new THREE.MeshBasicMaterial({map:new THREE.ImageUtils.loadTexture( "textures/ray_texture.png" ), transparent:true, depthTest: true, blending:THREE.AdditiveBlending});
+			var ray = new THREE.Mesh(geometry,material);
+			rayObj.add(ray);
+			ray.material.color.setHex( 0xffffff );
+			ray.geometry.applyMatrix( new THREE.Matrix4().translate( new THREE.Vector3(0,-55,0)));
+			ray.rotation.x = i*Math.PI/2;
+			fadeOut(ray,2000, function(){
+				scene.remove(rayObj);
+				
+			});
+		}
+		new TWEEN.Tween({
+			y:0
+		}).to({
+			y:30
+		}, 5000).easing( TWEEN.Easing.Sinusoidal.InOut ).onUpdate(function (){
+			rayObj.rotation.y = this.y;
+		}).onStart(function(){}).onComplete(function(){
+		}).start();
+		
+	}
+	function fadeIn(obj3DName, duration, callback){
+		this.tween = new TWEEN.Tween({op:0}).to({op:100}, duration).easing( TWEEN.Easing.Sinusoidal.Out ).onUpdate(function (){
+			obj3DName.material.opacity = this.op/100;
+		}).onStart(function(){
+			obj3DName.material.deepTest = true;
+			obj3DName.material.transparent = true;
+			obj3DName.material.alphaTest = 0;
+			obj3DName.material.opacity = 0;
+		}).onComplete(function(){
+			obj3DName.material.opacity = 1;
+			if(callback) return callback();
+		}).start();
+	}
+	function fadeOut(obj3DName, duration, callback){
+		this.tween = new TWEEN.Tween({op:100}).to({op:0}, duration).easing( TWEEN.Easing.Sinusoidal.Out ).onUpdate(function (){
+			obj3DName.material.opacity = this.op/100;
+		}).onStart(function(){
+			obj3DName.material.deepTest = true;
+			obj3DName.material.transparent = true;
+			obj3DName.material.alphaTest = 0;
+			obj3DName.material.opacity = 1;
+		}).onComplete(function(){
+			obj3DName.material.opacity = 0;
+			if(callback) return callback();
+		}).start();
+	}
+	function createParticles(){
+		var particleCount = 100;
+		var particle;
+		var geometry = new THREE.Geometry();
+		for(var p = 0; p < particleCount; p++) {
+
+			
+			particle = new THREE.Vector3(0, 0, 0);
+			particle.scale = 1;
+			geometry.vertices.push(particle);
+		}
+		
+		var material = new THREE.ParticleBasicMaterial({
+			color: 0xFFFFFF,
+			size: 1,
+			blending: THREE.AdditiveBlending,
+			transparent: true, 
+			alphaTest: 0.5
+		})
+		
+		var parts = new THREE.ParticleSystem(
+			geometry,
+			material
+		);
+		scene.add(parts);
+		
+		for(i=0;i<geometry.vertices.length; i++){
+			var particle = geometry.vertices[i];
+			var radius = Math.random() * 100;
+			var y = Math.random()*10-20;
+			var phi = Math.random() * Math.PI * 2;
+			var theta = Math.asin(y / radius);
+			new TWEEN.Tween({
+				x:particle.x,
+				y:particle.y,
+				z:particle.z
+			}).to({
+				x:Math.cos(theta) * Math.cos(phi) * radius,
+				y:Math.sin(theta) * Math.cos(phi) * radius,
+				z:Math.cos(theta) * Math.sin(phi) * radius
+			}, 500).easing( TWEEN.Easing.Sinusoidal.InOut ).onUpdate(function (){
+				particle.x = this.x;
+				particle.y = this.y;
+				particle.z = this.z;
+			}).onStart(function(){}).onComplete(function(){
+				scene.remove(parts);
+			}).start();
+		}
+	}
+	
+	function hitTest(listenedObject, objectsArray, range, callback){
+		for(var i=0; i<objectsArray.length; i++){
+			var distance = listenedObject.position.distanceTo(objectsArray[i].mesh.position);
+			if(distance<range.min && distance>range.max){
+				return callback(i);
+			}
+		}
+		
+	}
+	function Bug(bugOPT){
+		var parts = bugOPT.parts || 1;
+		var lives = bugOPT.lives || 1;
+
+		var bugSize = 10;
+		var posRange = worldRadius-2*bugSize;
+		
+		/*var g = new THREE.SphereGeometry( bugSize, 10, 10, 0, Math.PI * 2, 0, Math.PI );*/
+		var g = new THREE.CubeGeometry( bugSize, bugSize, bugSize, 1,1,1 );
+		/*var m = new THREE.MeshLambertMaterial({color:0x202020});*/
+		var m = new Physijs.createMaterial( new THREE.MeshLambertMaterial({ color:0x202020 }), .8,	.4 );
+		var bug = new Physijs.BoxMesh(g,m);
+		scene.add(bug);
+		bug.position.x = Math.random() * 2 - 1;
+		bug.position.y = Math.random() * 2 - 1;
+		bug.position.z = Math.random() * 2 - 1;
+		bug.position.normalize();
+		bug.position.multiplyScalar( posRange );
+
+		bugs.push({object:this, mesh:bug, lives:lives});
+		
+		this.object = bug;		
+
+		this.update = function(){
+			/*var axis = host.matrixWorld.getPosition().sub(bug.position).clone();
+			var distance = host.position.distanceTo(bug.position);
+			var speed = 1/3;
+			if(bug.position.distanceTo(scene.position)>worldRadius){
+				bug.__dirtyPosition = true;
+				bug.position.set(Math.random()*200-100,Math.random()*200-100,Math.random()*200-100);
+			}else{
+				bug.__dirtyPosition = false;
+			}
+			//bug.__dirtyPosition = true;
+			//bug.__dirtyRotation = true;
+			/*if(distance<posRange){
+				bug.translate(speed, axis);
+				hitTest(bug,bugs,{min:400,max:380},function(i){
+					//bug.__dirtyPosition = false;
+					//bugs[i].__dirtyPosition = false;
+				});
+			};*/
+			
+		}
+		
+	}
+	function Sound(sourceSfx){
+		var audio = document.createElement( 'audio' );
+		
+		var source = document.createElement( 'source' );
+		source.src = sourceSfx;
+
+		audio.appendChild( source );
+
+		console.log(source);
+		this.playing = 0;
+		this.play = function (playing) {
+			if(playing){
+				console.log(this.playing);
+				if(this.playing<2){
+					audio.currentTime = 0;
+					audio.play();
+					this.playing++;
+				}else{
+					this.playing = 0;
+				}
+			}else{
+				audio.currentTime = 0;
+				audio.play();
+			}
+		}
+		/*this.stop = function () {
+			audio.currentTime=0;
+		}*/
+	}
+	function createGalaxy(){
+		var texture = new THREE.ImageUtils.loadTexture('textures/galaxy_bg_2.jpg');
+		texture.wrapT = THREE.RepeatWrapping;
+		var material = new THREE.MeshLambertMaterial({ map: texture, transparent:true, opacity:1, bumpMap:texture, bumpScale:10, ambient: 0xffff00, specular: 0xf6efc7, shininess: 1, shading: shading });
+		material.side = THREE.BackSide;
+		//var geometry = new THREE.SphereGeometry( worldRadius*2, 10, 10, 0, Math.PI * 2, 0, Math.PI  );
+		var geometry = new THREE.CylinderGeometry( worldRadius+50, worldRadius+50, worldRadius*1000, 32, 1, true );
+		var mesh = new THREE.Mesh(geometry, material);
+		mesh.rotation.z = Math.PI/2;
+		scene.add(mesh);
+		
+		//lights
+		var directionalLight = new THREE.DirectionalLight( 0xFFFFFF*Math.random(), 1 );
+		directionalLight.position.set( 0, -worldRadius, 0 );
+		scene.add( directionalLight );
+		var directionalLight2 = new THREE.DirectionalLight( 0xFFFFFF*Math.random(), 1.5 );
+		directionalLight2.position.set( -worldRadius, worldRadius, 0 );
+		scene.add( directionalLight2 );
+		var directionalLight2 = new THREE.DirectionalLight( 0xFFFFFF*Math.random(), 1 );
+		directionalLight2.position.set( worldRadius, worldRadius, worldRadius );
+		scene.add( directionalLight2 );
+		var directionalLight2 = new THREE.DirectionalLight( 0xFFFFFF*Math.random(), 1.5 );
+		directionalLight2.position.set( -worldRadius, -worldRadius, -worldRadius );
+		scene.add( directionalLight2 );
+		
+		this.update = function(){
+			texture.offset.y	+= 0.0001;
+			texture.offset.y	%= 1;
+			/*if(i>100){
+				mesh.material.color.setHex( Math.random() * 0xffffff );
+				i=0;
+			}else{
+				i++;
+			}*/
+			
+		}
+		texture.needsUpdate	= true;
+		scene.fog = new THREE.FogExp2( 0x000000, worldRadius/1000000 );
+		
+		
+	}
+	window.onload = function(){
+		init();
+		render();
+	};
+</script>
+<div id="container"></div>
+</body>
+</html>

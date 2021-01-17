@@ -1,0 +1,234 @@
+<html>
+<head>
+<title>My first Three.js app</title>
+<style>
+	*{margin:0;padding:0;}
+	body{background:#000000;}
+	canvas { width: 100%; height: 100%; background:#fff }
+</style>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+</head>
+<body>
+<style>
+	body{background:#fff}
+</style>
+<script src="js/Three.js"></script>
+<script src="js/TrackballControls.js"></script>
+<script src="js/tween.min.js"></script>
+<script src="js/AnaglyphEffect.js"></script>
+
+<script>
+	var scene, camera, renderer, projector, effect;
+	var clock;
+	var controls;
+	var mouse = new THREE.Vector2();
+	var objects = [];
+	var objectsLookAt = [];
+	var lines = [];
+	var selected = null;
+	var distance;
+	
+	function init(){
+		scene = new THREE.Scene();
+		
+		camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 10000);
+		camera.position.set(0, 0, 10);
+		camera.lookAt(scene.position);
+		
+		scene.fog = new THREE.FogExp2( 0xffffff, 0.02);
+		
+		clock = new THREE.Clock();
+		
+		controls = new THREE.TrackballControls(camera);
+		
+		projector = new THREE.Projector();
+		
+		logo();
+		
+		renderer = new THREE.WebGLRenderer({ antialias: true, premultipliedAlpha:true, clearAlpha:0 });
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		document.body.appendChild(renderer.domElement);
+		
+		var oldVect = new THREE.Vector3();
+		
+		for(var i=0; i<3; i++){
+			var cube = new THREE.Mesh(new THREE.CubeGeometry(0.5,0.5,0.5), new THREE.MeshBasicMaterial({transparent:true, wireframe:true, color:0x000000}));
+			var vect = new THREE.Vector3(Math.random() * 2 - 1,Math.random() * 2 - 1,Math.random() * 2 - 1);
+			vect.normalize().multiplyScalar(25);
+			cube.position.set(vect.x,vect.y,vect.z);
+			scene.add(cube);
+			objects.push(cube);
+			objectsLookAt.push(cube);
+			
+			var material = new THREE.LineBasicMaterial({color: 0x999999, transparent:true, opacity:1});
+			var geometry = new THREE.Geometry();
+			geometry.vertices.push(new THREE.Vector3(oldVect.x,oldVect.y,oldVect.z));
+			geometry.vertices.push(new THREE.Vector3(vect.x,vect.y,vect.z));
+			var line = new THREE.Line(geometry, material);
+			lines.push(line);
+			if(i>0) scene.add(line);
+		
+			var oldVect = vect;
+			var mirrorLayers = [];
+			
+			for(var j=0; j<3; j++){
+				var layer = new THREE.Mesh(new THREE.PlaneGeometry(2,2), new THREE.MeshBasicMaterial({map:new THREE.ImageUtils.loadTexture( "garden/swan/"+j+".png" ), transparent:true, visible:true, side: THREE.DoubleSide}));
+				cube.add(layer);
+				layer.position.set(0,0,j/4);
+				mirrorLayers.push(layer);
+			}
+			for(var j=mirrorLayers.length-1; j>0; j--){
+				
+				var layer = mirrorLayers[j].clone();
+				console.log(layer);
+				cube.add(layer);
+				layer.position.set(0,0,j/-4);
+			}
+			
+		}
+		
+		//effects
+		effect = new THREE.AnaglyphEffect( renderer );
+		effect.setSize(window.innerWidth || 2, window.innerHeight || 2 ); 
+		
+		//Listeners
+		renderer.domElement.addEventListener( 'mousemove', onDocumentMouseMove, false );
+		renderer.domElement.addEventListener( 'mousedown', onDocumentMouseDown, false );
+		renderer.domElement.addEventListener( 'mouseup', onDocumentMouseUp, false );
+		
+	}
+	function animate() {
+		requestAnimationFrame( animate );
+		render();
+	} 
+	function render(){
+		
+		var delta = clock.getDelta();
+		
+		controls.update();
+		
+		for(var i=0; i<objectsLookAt.length; i++){
+			//objectsLookAt[i].lookAt(camera.position);
+		}
+		
+		if(selected!=null){
+			var position = new THREE.Vector3();
+			position.getPositionFromMatrix(selected.matrixWorld);
+			distance = position.distanceTo(camera.position);
+			
+			if(distance<10){
+				hideLines((distance-4)/10);
+			}
+		}
+		
+		TWEEN.update();
+		
+		renderer.render( scene, camera ); 
+		
+		//effect.render( scene, camera );
+
+	}
+
+	window.addEventListener('resize', onWindowResize, false);
+	
+	function onWindowResize(event){
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+	}
+	function onDocumentMouseMove(event){
+		event.preventDefault();
+		mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+		mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+	}
+	function onDocumentMouseDown(event){
+		event.preventDefault();
+		var vector = new THREE.Vector3( mouse.x, mouse.y, 0.5 );
+		projector.unprojectVector( vector, camera );
+		var raycaster = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
+		var intersects = raycaster.intersectObjects(objects);
+		if ( intersects.length > 0 ) {
+			selected = intersects[ 0 ].object;
+			var distance = 2;
+			var curentTargetPos = controls.target;
+			var newTargetPos = new THREE.Vector3();
+			newTargetPos.getPositionFromMatrix(selected.matrixWorld);
+			var currentCameraPos = camera.position;
+			var newCameraPos = {x:newTargetPos.x,y:newTargetPos.y,z:newTargetPos.z+distance};
+			new TWEEN.Tween({
+				tx:curentTargetPos.x,
+				ty:curentTargetPos.y,
+				tz:curentTargetPos.z,
+				cx:currentCameraPos.x,
+				cy:currentCameraPos.y,
+				cz:currentCameraPos.z
+			}).to({
+				tx:newTargetPos.x,
+				ty:newTargetPos.y,
+				tz:newTargetPos.z,
+				cx:newCameraPos.x,
+				cy:newCameraPos.y,
+				cz:newCameraPos.z
+			}, 1000).easing( TWEEN.Easing.Quadratic.InOut ).onUpdate(function (){
+				controls.enabled = false;
+				controls.target.set(this.tx,this.ty,this.tz);
+				camera.position.set(this.cx,this.cy,this.cz);
+			}).onStart(function(){
+				controls.enabled = false;
+			}).onComplete(function(){
+				camera.updateProjectionMatrix();
+				controls.enabled = true;
+			}).start();
+		}
+	}
+	function onDocumentMouseUp(event){
+		event.preventDefault();
+		controls.enabled = true;
+	}
+	
+	function hideLines(val){
+		for(var i=0;i<lines.length; i++){
+			lines[i].material.opacity = val;
+		}
+	}
+	function turnOnLines(){
+		for(var i=0;i<lines.length; i++){
+			lines[i].material.opacity = 1;
+		}
+	}
+	
+	function logo(){
+		var logo = new THREE.Mesh(
+			new THREE.CubeGeometry(5,5,5),
+			new THREE.MeshBasicMaterial({color:0x00ff00, transparent:true, visible:false})
+		);
+		var positions = [
+			[0,0,0], [-2,2,0], [-1,2,0], [1,2,0], [2,2,0],
+			[3,1,0], [3,0,0], [2,-1,0], [1,-2,0], [0,-3,0],
+			[-1,-2,0], [-2,-1,0], [-3,0,0], [-3,1,0], [-2,1,0],
+			[-1,1,0], [0,1,0], [1,1,0], [2,1,0], [2,0,0],
+			[1,-1,0], [0,-2,0], [-1,-1,0], [-2,0,0], [-1,0,0],
+			[1,0,0], [0,-1,0]
+		];
+		
+		for(var i=0; i<27; i++){
+			var cube = new THREE.Mesh(
+				new THREE.CubeGeometry(1,1,1),
+				new THREE.MeshBasicMaterial({color:0x000})
+			);
+			var vect = new THREE.Vector3(positions[i][0],positions[i][1],positions[i][2]);
+			vect.multiplyScalar(1.5);
+			cube.position.set(vect.x,vect.y,vect.z);
+			logo.add(cube);
+			
+		}
+		objects.push(logo);
+		scene.add(logo);
+	}
+	
+	init();
+	animate();
+	
+</script>
+</body>
+</html>
