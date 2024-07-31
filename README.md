@@ -16,7 +16,7 @@ Features:
 - [x] custom 3d models
 
 Future features:
-- [ ] project goes to typescript + react-fiber
+- [ ] go to typescript + react-fiber
 
 ### Arcade game
 
@@ -32,7 +32,7 @@ Features:
 - [x] basic AI enemies
       
 Future features:
-- [ ] project goes to modern JS pattern (ECMAScript 7 / ES2016) via AI support
+- [ ] go to modern JS pattern (ECMAScript 7 / ES2016) via AI support
 
 ### Model (React-fiber/typescript)
 
