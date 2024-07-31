@@ -1,6 +1,6 @@
 ### c05m05.com
 
-[c05m05.com](https://c05m05.com) is a purely JavasScript project with i had a chance work on in 2015. I have been amazed by the Three.js WebGL library, what led me to experiment with the framework and create this cosmic interface and game. Currently a bit old and good place for me to look where i started own journey with JS.
+[c05m05.com](https://c05m05.com) is a purely JavaScript project that I had a chance to work on in 2015. I was amazed by the Three.js WebGL library, which led me to experiment with the framework and create this cosmic interface and game. Although it's a bit old now, it's a good place for me to look back and see where I started my journey with JS.
 
 Main stack: JavaScript, three.js lib
 
