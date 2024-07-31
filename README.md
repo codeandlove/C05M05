@@ -33,3 +33,14 @@ Features:
       
 Future features:
 - [ ] project goes to modern JS pattern (ECMAScript 7 / ES2016) via AI support
+
+### Model (React-fiber/typescript)
+
+[<video src='video1.mov' width=180/>](https://private-user-images.githubusercontent.com/22400623/353952485-462105b7-25b0-4c24-9779-dfbccb8a6816.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MjI0NTE5NDMsIm5iZiI6MTcyMjQ1MTY0MywicGF0aCI6Ii8yMjQwMDYyMy8zNTM5NTI0ODUtNDYyMTA1YjctMjViMC00YzI0LTk3NzktZGZiY2NiOGE2ODE2Lm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDA3MzElMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQwNzMxVDE4NDcyM1omWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTQxODhjODI5ZDM0MTA3Y2Y4YjE3NTQ2NTZmZjk2MmE0ZDhiNzA4Njg3NjhlZTJjNGJmYjRlMjMxYjYyMzZkMTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JmFjdG9yX2lkPTAma2V5X2lkPTAmcmVwb19pZD0wIn0.gkW_raVoZybYbET8xW6OxYQeyVXTq1AbfihH6rLObZg)
+
+Started in 2021...
+
+Features:
+- [x] React-fiber/typescript
+- [x] new animation libs
+- [x] God mode and few other settings which does not work really well so far (except God mode, it does allways good to be God)
